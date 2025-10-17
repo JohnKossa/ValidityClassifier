@@ -1,20 +1,20 @@
 <tr class="filter-row">
   <th>
-    <button type="submit" class="primary small">Apply</button>
     <button type="button" class="secondary small" 
+            onclick="clearAllFilterInputs()"
             hx-post="/clear_filters" 
             hx-target="#table-body"
-            hx-swap="outerHTML">Clear</button>
+            hx-swap="outerHTML">Clear Filters</button>
   </th>
   <th>
     <input type="text" name="filter_valid_sale" placeholder="Filter..." 
-           value="{{ filters.get('valid_sale', '') }}" class="filter-input">
+           value="{{ filters.get('valid_sale', '') }}" class="filter-input js-filter-input">
   </th>
   {% for col in df.columns %}
     {% if col != 'valid_sale' %}
       <th>
         <input type="text" name="filter_{{ col }}" placeholder="Filter..." 
-               value="{{ filters.get(col, '') }}" class="filter-input">
+               value="{{ filters.get(col, '') }}" class="filter-input js-filter-input">
       </th>
     {% endif %}
   {% endfor %}

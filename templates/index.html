@@ -218,6 +218,12 @@
   </div>
 </main>
 <script>
+  // Function to clear all filter inputs
+  function clearAllFilterInputs() {
+  document.querySelectorAll('.js-filter-input').forEach(input => {
+    input.value = '';
+  });
+}
   document.addEventListener('DOMContentLoaded', function() {
     const uploadArea = document.getElementById('upload-area');
     const fileInput = document.getElementById('file-input');
@@ -234,6 +240,41 @@
         }
       }
     });
+
+    // Set up filter auto-submit functionality
+    const filterForm = document.getElementById('filter-form');
+    if (filterForm) {
+      // Debounce function to limit how often a function can be called
+      function debounce(func, wait) {
+        let timeout;
+        return function() {
+          const context = this;
+          const args = arguments;
+          clearTimeout(timeout);
+          timeout = setTimeout(() => {
+            func.apply(context, args);
+          }, wait);
+        };
+      }
+
+      // Function to submit the filter form
+      function submitFilterForm() {
+        // Use HTMX to trigger the request
+        htmx.trigger(filterForm, 'submit');
+      }
+
+      // Create debounced version of the submit function (3000ms = 3 seconds)
+      const debouncedSubmit = debounce(submitFilterForm, 3000);
+
+      // Add event listeners to all filter inputs
+      document.querySelectorAll('.js-filter-input').forEach(input => {
+        // Submit on blur (when user clicks away)
+        input.addEventListener('blur', submitFilterForm);
+
+        // Submit on keyup with debounce (after user stops typing for 5 seconds)
+        input.addEventListener('keyup', debouncedSubmit);
+      });
+    }
 
     // If elements don't exist, don't set up upload-related event listeners
     if (!uploadArea || !fileInput || !browseButton) return;

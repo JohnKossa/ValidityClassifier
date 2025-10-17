@@ -37,7 +37,7 @@
   </div>
 </form>
 <div class="table-wrap">
-  <form hx-post="/apply_filters" hx-target="#table-body" hx-swap="outerHTML">
+  <form id="filter-form" hx-post="/apply_filters" hx-target="#table-body" hx-swap="outerHTML">
     <table role="grid">
       <thead>
         <tr>
@@ -75,7 +75,7 @@
 <!-- Add pagination info -->
 <div id="pagination-info" class="pagination-info">
   <small>
-    Showing rows {{ page_size * current_page + 1 }}-{{ (page_size * (current_page + 1)) if (page_size * (current_page + 1)) < total_filtered|default(total_rows) else total_filtered|default(total_rows) }} 
+    Showing rows 1-{{ (page_size * (current_page + 1)) if (page_size * (current_page + 1)) < total_filtered|default(total_rows) else total_filtered|default(total_rows) }}
     of {{ total_filtered|default(total_rows) }} {% if total_filtered is defined and total_filtered != total_rows %}filtered results ({{ total_rows }} total){% else %}total{% endif %}
   </small>
 </div>
