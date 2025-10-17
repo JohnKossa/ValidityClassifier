@@ -207,7 +207,6 @@
 
     // Handle out-of-band swap for pagination info - ALWAYS SET UP THIS LISTENER
     document.addEventListener('htmx:afterOnLoad', function(event) {
-      console.log("AFTER ON LOAD")
       if (event.detail.xhr.getResponseHeader('HX-Trigger')) {
         const triggers = JSON.parse(event.detail.xhr.getResponseHeader('HX-Trigger'));
         if (triggers.updatePaginationInfo) {
