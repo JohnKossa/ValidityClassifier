@@ -1,3 +1,6 @@
 <div id="pagination-info" class="pagination-info">
-  <small>Showing rows {{ page_size * current_page + 1 }}-{{ (page_size * (current_page + 1)) if (page_size * (current_page + 1)) < total_rows else total_rows }} of {{ total_rows }} total</small>
+  <small>
+    Showing rows {{ page_size * current_page + 1 }}-{{ (page_size * (current_page + 1)) if (page_size * (current_page + 1)) < total_filtered else total_filtered }} 
+    of {{ total_filtered }} {% if total_filtered != total_rows %}filtered results ({{ total_rows }} total){% else %}total{% endif %}
+  </small>
 </div>

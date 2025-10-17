@@ -33,6 +33,7 @@ class SessionKeys:
     sid: str = "sid"  # stable per-session id for model registry
     page_size: str = "page_size"  # Number of rows to load per page
     current_page: str = "current_page"  # Current page number
+    filters: str = "filters"  # Dictionary of column filters
 
 
 app = Flask(__name__)
@@ -127,18 +128,41 @@ def has_data_loaded() -> bool:
     return SessionKeys.df_json in session and session[SessionKeys.df_json] is not None
 
 
-def get_paginated_frame(page=0, page_size=1000):
-    """Return a paginated subset of the dataframe."""
+def get_paginated_frame(page=0, page_size=1000, apply_filters=True):
+    """Return a paginated subset of the dataframe with optional filtering."""
     df = get_frame_from_session()
-    total_rows = len(df)
+
+    # Apply filters if requested and available
+    if apply_filters and SessionKeys.filters in session:
+        filters = session.get(SessionKeys.filters, {})
+        for column, filter_value in filters.items():
+            if filter_value and column in df.columns:
+                # Handle different column types appropriately
+                if pd.api.types.is_numeric_dtype(df[column]):
+                    # For numeric columns, try to match exactly or as substring
+                    try:
+                        # Try exact numeric match first
+                        filter_num = float(filter_value)
+                        df = df[df[column] == filter_num]
+                    except ValueError:
+                        # Fall back to string contains for partial matches
+                        df = df[df[column].astype(str).str.contains(filter_value, case=False, na=False)]
+                else:
+                    # For string columns, use case-insensitive contains
+                    df = df[df[column].astype(str).str.contains(filter_value, case=False, na=False)]
+
+    # Get total filtered rows
+    total_filtered = len(df)
+
+    # Apply pagination
     start_idx = page * page_size
-    end_idx = min(start_idx + page_size, total_rows)
+    end_idx = min(start_idx + page_size, total_filtered)
 
     # Store pagination info in session
     session[SessionKeys.current_page] = page
     session[SessionKeys.page_size] = page_size
 
-    return df.iloc[start_idx:end_idx], total_rows
+    return df.iloc[start_idx:end_idx], total_filtered
 
 
 def get_frame_from_session() -> pd.DataFrame:
@@ -370,7 +394,16 @@ def index():
     # Normal flow with data
     # Get first page of data
     page_size = 1000
-    df_page, total_rows = get_paginated_frame(0, page_size)
+
+    # Get filters if any
+    filters = session.get(SessionKeys.filters, {})
+
+    # Get total unfiltered rows for comparison
+    total_rows = len(get_frame_from_session())
+
+    # Apply filters if they exist
+    df_page, total_filtered = get_paginated_frame(0, page_size)
+
     src = get_sources()
     pos, neg = labeled_counts()
     state = predict_button_state(pos, neg)
@@ -390,7 +423,9 @@ def index():
         current_page=0,
         page_size=page_size,
         total_rows=total_rows,
-        has_more=(total_rows > page_size),
+        total_filtered=total_filtered,
+        has_more=(total_filtered > page_size),
+        filters=filters,
     )
 
 
@@ -760,6 +795,7 @@ def reset():
     session[SessionKeys.label_source] = {k: "unknown" for k in df["key_sale"].tolist()}
     session[SessionKeys.proba] = {}
     session.pop(SessionKeys.last_predicted_at, None)
+    session.pop(SessionKeys.filters, None)
     # Clear labels_version and per-session model registry entry
     sid = session.get(SessionKeys.sid)
     if sid and sid in MODEL_REGISTRY:
@@ -789,6 +825,7 @@ def clear_data():
     session.pop(SessionKeys.labels_version, None)
     session.pop(SessionKeys.page_size, None)
     session.pop(SessionKeys.current_page, None)
+    session.pop(SessionKeys.filters, None)
 
     # Clear any existing model
     sid = session.get(SessionKeys.sid)
@@ -805,6 +842,124 @@ def clear_data():
     return redirect(url_for("index"))
 
 
+@app.post("/apply_filters")
+def apply_filters():
+    """Apply filters to the dataframe and return the first page of filtered results."""
+    if not has_data_loaded():
+        return jsonify({"error": "No data loaded"}), 400
+
+    # Get filter values from form
+    filters = {}
+    for key, value in request.form.items():
+        if key.startswith('filter_') and value.strip():
+            column = key[7:]  # Remove 'filter_' prefix
+            filters[column] = value.strip()
+
+    # Store filters in session
+    session[SessionKeys.filters] = filters
+
+    # Reset to page 1 when filters change
+    page_size = session.get(SessionKeys.page_size, 1000)
+    df_page, total_filtered = get_paginated_frame(0, page_size)
+
+    # Get total unfiltered rows for comparison
+    total_rows = len(get_frame_from_session())
+
+    # Check if there are more rows after this page
+    has_more = page_size < total_filtered
+
+    # Prepare the main response with the rows
+    response = render_template(
+        "_table_body.html",
+        df=df_page,
+        sources=get_sources(),
+        probas=get_probas(),
+        current_page=0,
+        page_size=page_size,
+        total_rows=total_rows,
+        total_filtered=total_filtered,
+        has_more=has_more,
+        next_page=1,
+        filters=filters
+    )
+
+    # Add out-of-band swap for pagination info
+    pagination_info = render_template(
+        "_pagination_info.html",
+        current_page=0,
+        page_size=page_size,
+        total_rows=total_rows,
+        total_filtered=total_filtered
+    )
+
+    # Add the HX-Trigger header for out-of-band swap
+    return Response(
+        response,
+        headers={
+            "HX-Trigger": json.dumps({
+                "updatePaginationInfo": {
+                    "content": pagination_info,
+                    "target": "#pagination-info"
+                }
+            })
+        }
+    )
+
+
+@app.post("/clear_filters")
+def clear_filters():
+    """Clear all filters and return to unfiltered view."""
+    if SessionKeys.filters in session:
+        session.pop(SessionKeys.filters, None)
+
+    # Get the first page of data (now unfiltered)
+    page_size = session.get(SessionKeys.page_size, 1000)
+    df_page, total_filtered = get_paginated_frame(0, page_size, apply_filters=False)
+
+    # Get total unfiltered rows for comparison
+    total_rows = len(get_frame_from_session())
+
+    # Check if there are more rows after this page
+    has_more = page_size < total_filtered
+
+    # Prepare the main response with the rows
+    response = render_template(
+        "_table_body.html",
+        df=df_page,
+        sources=get_sources(),
+        probas=get_probas(),
+        current_page=0,
+        page_size=page_size,
+        total_rows=total_rows,
+        total_filtered=total_filtered,  # No filters, so filtered = total
+        has_more=has_more,
+        next_page=1,
+        filters={}  # Empty filters
+    )
+
+    # Add out-of-band swap for pagination info
+    pagination_info = render_template(
+        "_pagination_info.html",
+        current_page=0,
+        page_size=page_size,
+        total_rows=total_rows,
+        total_filtered=total_filtered  # No filters, so filtered = total
+    )
+
+    # Add the HX-Trigger header for out-of-band swap
+    return Response(
+        response,
+        headers={
+            "HX-Trigger": json.dumps({
+                "updatePaginationInfo": {
+                    "content": pagination_info,
+                    "target": "#pagination-info"
+                }
+            })
+        }
+    )
+
+
 @app.route("/load_more", methods=["GET"])
 def load_more():
     """Load the next page of rows."""
@@ -814,12 +969,18 @@ def load_more():
     page = request.args.get("page", 1, type=int)
     page_size = request.args.get("page_size", 1000, type=int)
 
-    df_page, total_rows = get_paginated_frame(page, page_size)
+    df_page, total_filtered = get_paginated_frame(page, page_size)
     if df_page.empty:
         return jsonify({"error": "No more rows"}), 404
 
     # Check if there are more rows after this page
-    has_more = (page + 1) * page_size < total_rows
+    has_more = (page + 1) * page_size < total_filtered
+
+    # Get total unfiltered rows for comparison
+    total_rows = len(get_frame_from_session())
+
+    # Get filters if any
+    filters = session.get(SessionKeys.filters, {})
 
     # Prepare the main response with the rows
     response = render_template(
@@ -831,6 +992,7 @@ def load_more():
         page_size=page_size,
         has_more=has_more,
         next_page=page + 1,
+        filters=filters,
     )
 
     # Add out-of-band swap for pagination info
@@ -838,7 +1000,8 @@ def load_more():
         "_pagination_info.html",
         current_page=page,
         page_size=page_size,
-        total_rows=total_rows
+        total_rows=total_rows,
+        total_filtered=total_filtered
     )
 
     # Add the HX-Trigger header for out-of-band swap
