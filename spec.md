@@ -136,3 +136,35 @@ The ValidityClassifier application provides two buttons for managing data state:
 - The "Upload New File" functionality is implemented as a POST endpoint (/clear_data)
 - Both endpoints handle proper cleanup of session data and model registry entries
 - The "Upload New File" endpoint additionally cancels any in-flight model training futures
+
+## Lazy Loading for Large Datasets
+
+### Overview
+The ValidityClassifier application implements a lazy loading mechanism to improve performance when dealing with large datasets. Instead of rendering all rows at once, the application initially loads a subset of rows and loads more as the user scrolls.
+
+### User Interface
+- Initially, only the first 1000 rows are rendered
+- A "Loading more rows..." indicator appears at the bottom of the table
+- As the user scrolls and the indicator comes into view, the next chunk of rows is automatically loaded
+- A pagination info display shows the current range of rows being displayed and the total number of rows
+
+### Implementation Details
+1. **Backend Pagination**
+   - The dataframe is paginated on the server side
+   - Each page contains a configurable number of rows (default: 1000)
+   - The pagination state is stored in the session
+
+2. **Lazy Loading Mechanism**
+   - Uses HTMX's `hx-trigger="revealed"` to detect when the user scrolls to the bottom of the table
+   - Automatically requests the next page of rows when the loading indicator comes into view
+   - Seamlessly appends new rows to the table without a full page reload
+
+3. **Performance Benefits**
+   - Significantly reduces initial page load time for large datasets
+   - Minimizes memory usage on the client side
+   - Maintains all functionality (labeling, prediction, export) while improving performance
+
+4. **Technical Components**
+   - A `/load_more` endpoint that returns the next chunk of rows
+   - A `_rows_chunk.html` template for rendering chunks of rows
+   - CSS animations for the loading indicator

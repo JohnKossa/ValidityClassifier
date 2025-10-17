@@ -49,68 +49,28 @@
       {% endfor %}
     </tr>
   </thead>
-  <tbody>
+  <tbody id="data-rows">
     {% for _, row in df.iterrows() %}
-      {% set key = (row['key_sale'] | string) %}
-      {% set source = sources.get(key, 'unknown') %}
-      <tr id="row-{{ key }}">
-        <!-- Actions first -->
-        <td class="actions">
-          {% if source == 'user' and row['valid_sale'] in ['valid', 'invalid'] %}
-            <form hx-post="/unset" hx-target="#row-{{ key }}" hx-swap="outerHTML" hx-select="tr" style="display:inline">
-              <input type="hidden" name="key" value="{{ key }}">
-              <button type="submit" class="secondary">Unset</button>
-            </form>
-          {% else %}
-            <form hx-post="/label" hx-target="#row-{{ key }}" hx-swap="outerHTML" hx-select="tr" style="display:inline">
-              <input type="hidden" name="key" value="{{ key }}">
-              <input type="hidden" name="value" value="valid">
-              <button type="submit">valid</button>
-            </form>
-            <form hx-post="/label" hx-target="#row-{{ key }}" hx-swap="outerHTML" hx-select="tr" style="display:inline">
-              <input type="hidden" name="key" value="{{ key }}">
-              <input type="hidden" name="value" value="invalid">
-              <button type="submit" class="contrast">invalid</button>
-            </form>
-          {% endif %}
-        </td>
-
-        <!-- valid_sale second, with special styling/heat/badges preserved -->
-        {% set val = row['valid_sale'] %}
-        {% set p = None %}
-        {% if source == 'machine' %}
-          {% set p = probas.get(key) %}
-        {% endif %}
-        {% if source == 'machine' and p is not none %}
-          {% set idx = (p * 20)|int %}
-          <td id="cell-label-{{ key }}" class="heat-{{ idx }}">
-        {% elif val == 'valid' %}
-          <td id="cell-label-{{ key }}" class="bg-valid">
-        {% elif val == 'invalid' %}
-          <td id="cell-label-{{ key }}" class="bg-invalid">
-        {% else %}
-          <td id="cell-label-{{ key }}">
-        {% endif %}
-          {{ row['valid_sale'] }}
-          {% if source == 'user' %}
-            <span class="badge badge-user">user</span>
-          {% elif source == 'machine' %}
-            <span class="badge badge-machine">machine</span>
-            {% if p is not none %}
-              <span class="proba">({{ '%.0f' % (p*100) }}%)</span>
-            {% endif %}
-          {% endif %}
-        </td>
-
-        <!-- Remaining data columns (skip valid_sale here) -->
-        {% for col in df.columns %}
-          {% if col != 'valid_sale' %}
-            <td>{{ row[col] }}</td>
-          {% endif %}
-        {% endfor %}
-      </tr>
+      {% include '_row.html' %}
     {% endfor %}
+
+    {% if has_more %}
+    <tr id="load-more-trigger" 
+        hx-get="/load_more?page={{ current_page + 1 }}&page_size={{ page_size }}" 
+        hx-trigger="revealed"
+        hx-swap="outerHTML"
+        class="load-more-row">
+      <td colspan="{{ df.columns|length + 1 }}" class="load-more-cell">
+        <div class="loading-indicator">Loading more rows...</div>
+      </td>
+    </tr>
+    {% endif %}
   </tbody>
 </table>
+</div>
+
+<!-- Add pagination info -->
+<div class="pagination-info">
+  <small>Showing rows 1-{{ page_size if page_size < total_rows else total_rows }} of {{ total_rows }} total</small>
 </div>
 {% endif %}

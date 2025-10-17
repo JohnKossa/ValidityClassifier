@@ -30,6 +30,8 @@ class SessionKeys:
     last_predicted_at: str = "last_predicted_at"  # timestamp of last predict completion
     labels_version: str = "labels_version"  # incremented on each user label/unset
     sid: str = "sid"  # stable per-session id for model registry
+    page_size: str = "page_size"  # Number of rows to load per page
+    current_page: str = "current_page"  # Current page number
 
 
 app = Flask(__name__)
@@ -122,6 +124,20 @@ def put_frame_in_session(df: pd.DataFrame):
 def has_data_loaded() -> bool:
     """Check if a dataframe is loaded in the session."""
     return SessionKeys.df_json in session and session[SessionKeys.df_json] is not None
+
+
+def get_paginated_frame(page=0, page_size=1000):
+    """Return a paginated subset of the dataframe."""
+    df = get_frame_from_session()
+    total_rows = len(df)
+    start_idx = page * page_size
+    end_idx = min(start_idx + page_size, total_rows)
+
+    # Store pagination info in session
+    session[SessionKeys.current_page] = page
+    session[SessionKeys.page_size] = page_size
+
+    return df.iloc[start_idx:end_idx], total_rows
 
 
 def get_frame_from_session() -> pd.DataFrame:
@@ -351,14 +367,17 @@ def index():
         )
 
     # Normal flow with data
-    df = get_frame_from_session()
+    # Get first page of data
+    page_size = 1000
+    df_page, total_rows = get_paginated_frame(0, page_size)
     src = get_sources()
     pos, neg = labeled_counts()
     state = predict_button_state(pos, neg)
+
     return render_template(
         "index.html",
         has_data=has_data,
-        df=df,
+        df=df_page,
         sources=src,
         can_predict=state["can_predict"],
         predict_text=state["predict_text"],
@@ -367,6 +386,10 @@ def index():
         neg=neg,
         probas=get_probas(),
         last_predicted_at=session.get(SessionKeys.last_predicted_at),
+        current_page=0,
+        page_size=page_size,
+        total_rows=total_rows,
+        has_more=(total_rows > page_size),
     )
 
 
@@ -763,6 +786,8 @@ def clear_data():
     session.pop(SessionKeys.proba, None)
     session.pop(SessionKeys.last_predicted_at, None)
     session.pop(SessionKeys.labels_version, None)
+    session.pop(SessionKeys.page_size, None)
+    session.pop(SessionKeys.current_page, None)
 
     # Clear any existing model
     sid = session.get(SessionKeys.sid)
@@ -777,6 +802,34 @@ def clear_data():
             pass
 
     return redirect(url_for("index"))
+
+
+@app.route("/load_more", methods=["GET"])
+def load_more():
+    """Load the next page of rows."""
+    if not has_data_loaded():
+        return jsonify({"error": "No data loaded"}), 400
+
+    page = request.args.get("page", 1, type=int)
+    page_size = request.args.get("page_size", 1000, type=int)
+
+    df_page, total_rows = get_paginated_frame(page, page_size)
+    if df_page.empty:
+        return jsonify({"error": "No more rows"}), 404
+
+    # Check if there are more rows after this page
+    has_more = (page + 1) * page_size < total_rows
+
+    return render_template(
+        "_rows_chunk.html",
+        df=df_page,
+        sources=get_sources(),
+        probas=get_probas(),
+        current_page=page,
+        page_size=page_size,
+        has_more=has_more,
+        next_page=page + 1,
+    )
 
 
 # Templates expect Jinja2 available. Provide a simple run entry.

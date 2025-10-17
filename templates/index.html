@@ -140,6 +140,27 @@
       padding: 0;
     }
 
+    /* Lazy loading styles */
+    .load-more-row {
+      height: 50px;
+    }
+
+    .load-more-cell {
+      text-align: center;
+      padding: 10px;
+    }
+
+    .loading-indicator {
+      display: inline-block;
+      animation: fadePulse 1.2s ease-in-out infinite alternate;
+    }
+
+    .pagination-info {
+      text-align: right;
+      margin-top: 0.5rem;
+      color: #6c757d;
+    }
+
     @keyframes fadePulse {
       from { opacity: 0.25; }
       to   { opacity: 1; }
