@@ -3,3 +3,6 @@ Flask-Session>=0.5.0
 pandas>=2.1.0
 catboost>=1.2
 numpy>=1.26
+
+scikit-learn~=1.7.2
+pyarrow~=21.0.0

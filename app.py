@@ -1,4 +1,3 @@
-import json
 import os
 import tempfile
 from dataclasses import dataclass
@@ -519,7 +518,7 @@ def predict():
     with entry["lock"]:
         if entry.get("model") is not None and entry.get("trained_on_version") == version:
             use_model = entry["model"]
-            print(f"Using existing model trained on {version} at {entry.get("trained_at")}")
+            print(f"Using existing model trained on {version} at {entry.get('trained_at')}")
 
     if use_model is None:
         print("Existing model is stale or missing, retraining full model")
