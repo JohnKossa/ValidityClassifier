@@ -1,10 +1,11 @@
 import json
 import os
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Tuple
 
-from flask import Flask, render_template, request, session, redirect, url_for
+from flask import Flask, render_template, request, session, redirect, url_for, send_file
 from flask_session import Session
 import pandas as pd
 from io import StringIO
@@ -556,6 +557,53 @@ def predict():
         pos=pos,
         neg=neg,
         last_predicted_at=session.get(SessionKeys.last_predicted_at),
+    )
+
+
+@app.post("/export")
+def export_data():
+    """Export the current dataframe with labels as a CSV file."""
+    df = get_frame_from_session()
+    sources = get_sources()
+    probas = get_probas()
+
+    # Create a copy to avoid modifying the original
+    export_df = df.copy()
+
+    # Add source column
+    export_df["valid_sale_source"] = export_df["key_sale"].map(sources)
+
+    # Add probability/confidence column
+    def get_confidence(row):
+        key = row["key_sale"]
+        source = sources.get(key, "unknown")
+        if source == "user":
+            # 1 for valid, 0 for invalid
+            return 1.0 if row["valid_sale"] == "valid" else 0.0
+        elif source == "machine":
+            # Use stored probability
+            return probas.get(key, 0.5)
+        else:
+            # Unknown
+            return None
+
+    export_df["valid_sale_pct"] = export_df.apply(get_confidence, axis=1)
+
+    # Create a temporary file for the CSV
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as temp:
+        export_df.to_csv(temp.name, index=False)
+        temp_path = temp.name
+
+    # Generate a meaningful filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"labeled_data_{timestamp}.csv"
+
+    # Send the file as an attachment
+    return send_file(
+        temp_path,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='text/csv'
     )
 
 
