@@ -8,7 +8,7 @@
   <div class="upload-content">
     <div class="upload-icon">📁</div>
     <p>Drag and drop a CSV file here</p>
-    <p class="upload-hint">File must have a key_sale column and be under 5000 rows</p>
+    <p class="upload-hint">File must have a key_sale column. If valid_sale exists, "valid" and "invalid" will be imported as user inputs; others will be ignored.</p>
     <input type="file" name="file" id="file-input" accept=".csv" style="display:none">
     <button type="button" id="browse-button" class="secondary">Browse files</button>
   </div>

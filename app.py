@@ -708,13 +708,6 @@ def upload_file():
         # Read the CSV file
         df = pd.read_csv(file, keep_default_na=False, na_filter=False, low_memory=False)
 
-        # Validate file size
-        if len(df) > 5000:
-            return jsonify({
-                "status": "error", 
-                "message": "File too large. Maximum 5000 rows allowed."
-            }), 400
-
         # Validate required columns
         if 'key_sale' not in df.columns:
             return jsonify({
