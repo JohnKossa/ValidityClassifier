@@ -205,7 +205,18 @@
     const errorDiv = document.getElementById('upload-error');
     const errorMessage = document.getElementById('error-message');
 
-    // If elements don't exist, don't set up event listeners
+    // Handle out-of-band swap for pagination info - ALWAYS SET UP THIS LISTENER
+    document.addEventListener('htmx:afterOnLoad', function(event) {
+      console.log("AFTER ON LOAD")
+      if (event.detail.xhr.getResponseHeader('HX-Trigger')) {
+        const triggers = JSON.parse(event.detail.xhr.getResponseHeader('HX-Trigger'));
+        if (triggers.updatePaginationInfo) {
+          document.getElementById('pagination-info').outerHTML = triggers.updatePaginationInfo.content;
+        }
+      }
+    });
+
+    // If elements don't exist, don't set up upload-related event listeners
     if (!uploadArea || !fileInput || !browseButton) return;
 
     // Handle browse button click

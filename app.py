@@ -1,10 +1,11 @@
+import json
 import os
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Tuple
 
-from flask import Flask, render_template, request, session, redirect, url_for, send_file, jsonify
+from flask import Flask, render_template, request, session, redirect, url_for, send_file, jsonify, Response
 from flask_session import Session
 import pandas as pd
 from io import StringIO
@@ -820,7 +821,8 @@ def load_more():
     # Check if there are more rows after this page
     has_more = (page + 1) * page_size < total_rows
 
-    return render_template(
+    # Prepare the main response with the rows
+    response = render_template(
         "_rows_chunk.html",
         df=df_page,
         sources=get_sources(),
@@ -829,6 +831,27 @@ def load_more():
         page_size=page_size,
         has_more=has_more,
         next_page=page + 1,
+    )
+
+    # Add out-of-band swap for pagination info
+    pagination_info = render_template(
+        "_pagination_info.html",
+        current_page=page,
+        page_size=page_size,
+        total_rows=total_rows
+    )
+
+    # Add the HX-Trigger header for out-of-band swap
+    return Response(
+        response,
+        headers={
+            "HX-Trigger": json.dumps({
+                "updatePaginationInfo": {
+                    "content": pagination_info,
+                    "target": "#pagination-info"
+                }
+            })
+        }
     )
 
 

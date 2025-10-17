@@ -70,7 +70,7 @@
 </div>
 
 <!-- Add pagination info -->
-<div class="pagination-info">
-  <small>Showing rows 1-{{ page_size if page_size < total_rows else total_rows }} of {{ total_rows }} total</small>
+<div id="pagination-info" class="pagination-info">
+  <small>Showing rows 1-{{ (page_size * (current_page + 1)) if (page_size * (current_page + 1)) < total_rows else total_rows }} of {{ total_rows }} total</small>
 </div>
 {% endif %}
