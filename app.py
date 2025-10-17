@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Tuple
 
-from flask import Flask, render_template, request, session, redirect, url_for, send_file
+from flask import Flask, render_template, request, session, redirect, url_for, send_file, jsonify
 from flask_session import Session
 import pandas as pd
 from io import StringIO
@@ -118,6 +118,11 @@ def sanitize_df(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
 
 def put_frame_in_session(df: pd.DataFrame):
     session[SessionKeys.df_json] = df.to_json(orient="split")
+
+
+def has_data_loaded() -> bool:
+    """Check if a dataframe is loaded in the session."""
+    return SessionKeys.df_json in session and session[SessionKeys.df_json] is not None
 
 
 def get_frame_from_session() -> pd.DataFrame:
@@ -328,12 +333,32 @@ def predict_button_state(pos: int, neg: int) -> dict:
 
 @app.route("/")
 def index():
+    has_data = has_data_loaded()
+
+    if not has_data:
+        # Render template with just the upload area
+        return render_template(
+            "index.html",
+            has_data=has_data,
+            df=None,
+            sources={},
+            can_predict=False,
+            predict_text="Re-predict (need data)",
+            predict_title="Upload data to enable predictions",
+            pos=0,
+            neg=0,
+            probas={},
+            last_predicted_at=None,
+        )
+
+    # Normal flow with data
     df = get_frame_from_session()
     src = get_sources()
     pos, neg = labeled_counts()
     state = predict_button_state(pos, neg)
     return render_template(
         "index.html",
+        has_data=has_data,
         df=df,
         sources=src,
         can_predict=state["can_predict"],
@@ -607,8 +632,103 @@ def export_data():
     )
 
 
+@app.post("/upload")
+def upload_file():
+    """Handle file upload via drag and drop."""
+    if 'file' not in request.files:
+        return jsonify({"status": "error", "message": "No file provided"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"status": "error", "message": "No file selected"}), 400
+
+    if not file.filename.endswith('.csv'):
+        return jsonify({"status": "error", "message": "Only CSV files are supported"}), 400
+
+    # Process the file
+    try:
+        # Read the CSV file
+        df = pd.read_csv(file, keep_default_na=False, na_filter=False, low_memory=False)
+
+        # Validate file size
+        if len(df) > 5000:
+            return jsonify({
+                "status": "error", 
+                "message": "File too large. Maximum 5000 rows allowed."
+            }), 400
+
+        # Validate required columns
+        if 'key_sale' not in df.columns:
+            return jsonify({
+                "status": "error", 
+                "message": "Missing required column: key_sale"
+            }), 400
+
+        # Enforce key as string
+        df['key_sale'] = df['key_sale'].astype(str)
+
+        # Handle valid_sale column
+        if 'valid_sale' in df.columns:
+            # Create a mask for valid values
+            valid_mask = df['valid_sale'].isin(['valid', 'invalid'])
+
+            # Store the original values for valid entries
+            valid_values = df.loc[valid_mask, 'valid_sale'].copy()
+
+            # Set all to unknown first
+            df['valid_sale'] = 'unknown'
+
+            # Restore valid entries
+            df.loc[valid_mask, 'valid_sale'] = valid_values
+        else:
+            # Initialize valid_sale column
+            df['valid_sale'] = 'unknown'
+
+        # Sanitize feature columns
+        feature_cols = [c for c in df.columns if c not in ("key_sale", "valid_sale")]
+        df = sanitize_df(df, feature_cols)
+
+        # Store in session
+        put_frame_in_session(df)
+
+        # Initialize label sources
+        sources = {k: "unknown" for k in df["key_sale"].tolist()}
+        # Mark user-labeled rows
+        for idx, row in df.iterrows():
+            if row['valid_sale'] in ['valid', 'invalid']:
+                sources[row['key_sale']] = 'user'
+
+        session[SessionKeys.label_source] = sources
+        session[SessionKeys.proba] = {}
+
+        # Reset versioning
+        session[SessionKeys.labels_version] = 0
+
+        # Clear any existing model
+        sid = get_sid()
+        if sid in MODEL_REGISTRY:
+            MODEL_REGISTRY.pop(sid, None)
+
+        # Get counts for response
+        pos, neg = labeled_counts()
+
+        return jsonify({
+            "status": "success",
+            "message": f"File uploaded successfully with {len(df)} rows",
+            "rows": len(df),
+            "labeled": pos + neg
+        })
+
+    except Exception as e:
+        return jsonify({
+            "status": "error", 
+            "message": f"Error processing file: {str(e)}"
+        }), 500
+
+
 @app.post("/reset")
 def reset():
+    """Reset to demo data with all labels set to 'unknown'."""
     df = load_initial_dataframe()
     # Sanitize once per session on reset
     feature_cols = [c for c in df.columns if c not in ("key_sale", "valid_sale")]
@@ -629,6 +749,34 @@ def reset():
         except Exception:
             pass
     session.pop(SessionKeys.labels_version, None)
+    return redirect(url_for("index"))
+
+
+@app.post("/clear_data")
+def clear_data():
+    """Clear the dataframe from the session and prepare for a new upload."""
+    # Clear the dataframe from the session
+    if SessionKeys.df_json in session:
+        session.pop(SessionKeys.df_json, None)
+
+    # Clear other related session data
+    session.pop(SessionKeys.label_source, None)
+    session.pop(SessionKeys.proba, None)
+    session.pop(SessionKeys.last_predicted_at, None)
+    session.pop(SessionKeys.labels_version, None)
+
+    # Clear any existing model
+    sid = session.get(SessionKeys.sid)
+    if sid and sid in MODEL_REGISTRY:
+        entry = MODEL_REGISTRY.pop(sid, None)
+        # Best-effort: cancel any in-flight future
+        try:
+            fut = entry.get("future") if entry else None
+            if fut:
+                fut.cancel()
+        except Exception:
+            pass
+
     return redirect(url_for("index"))
 
 

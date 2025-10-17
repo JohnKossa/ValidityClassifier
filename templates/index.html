@@ -89,6 +89,57 @@
     }
     form.htmx-request .predict-meta .last-run { display: none; }
 
+    /* Upload area styling */
+    .upload-area {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      margin-bottom: 1rem;
+      background-color: #f8f9fa;
+      transition: all 0.3s ease;
+    }
+
+    .upload-area.dragover {
+      background-color: #e9ecef;
+      border-color: #6c757d;
+    }
+
+    .upload-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .upload-hint {
+      font-size: 0.8rem;
+      color: #6c757d;
+    }
+
+    .alert {
+      padding: 0.75rem 1.25rem;
+      margin-bottom: 1rem;
+      border: 1px solid transparent;
+      border-radius: 0.25rem;
+    }
+
+    .alert-error {
+      color: #721c24;
+      background-color: #f8d7da;
+      border-color: #f5c6cb;
+    }
+
+    .close {
+      float: right;
+      font-size: 1.5rem;
+      font-weight: 700;
+      line-height: 1;
+      color: #000;
+      opacity: 0.5;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
     @keyframes fadePulse {
       from { opacity: 0.25; }
       to   { opacity: 1; }
@@ -104,12 +155,17 @@
       <div class="row">
         <div class="col">
           <form method="post" action="/reset">
-            <button type="submit" class="secondary">Reset demo data</button>
+            <button type="submit" class="secondary">Clear Labels</button>
+          </form>
+        </div>
+        <div class="col">
+          <form method="post" action="/clear_data">
+            <button type="submit" class="secondary">Upload New File</button>
           </form>
         </div>
         <div class="col">
           <form method="post" action="/export">
-            <button type="submit" class="primary">Export labeled data</button>
+            <button type="submit" class="primary" {% if not has_data %}disabled{% endif %}>Export labeled data</button>
           </form>
         </div>
       </div>
@@ -120,5 +176,123 @@
     {% include "_table.html" %}
   </div>
 </main>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const uploadArea = document.getElementById('upload-area');
+    const fileInput = document.getElementById('file-input');
+    const browseButton = document.getElementById('browse-button');
+    const errorDiv = document.getElementById('upload-error');
+    const errorMessage = document.getElementById('error-message');
+
+    // If elements don't exist, don't set up event listeners
+    if (!uploadArea || !fileInput || !browseButton) return;
+
+    // Handle browse button click
+    browseButton.addEventListener('click', function() {
+      fileInput.click();
+    });
+
+    // Handle file selection via input
+    fileInput.addEventListener('change', function() {
+      if (fileInput.files.length > 0) {
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        // Use fetch API to upload
+        fetch('/upload', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'error') {
+            showError(data.message);
+          } else {
+            // Reload the page to show the new data
+            window.location.reload();
+          }
+        })
+        .catch(error => {
+          showError('Upload failed: ' + error.message);
+        });
+      }
+    });
+
+    // Prevent default drag behaviors
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      document.body.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    // Highlight drop area when item is dragged over it
+    ['dragenter', 'dragover'].forEach(eventName => {
+      uploadArea.addEventListener(eventName, highlight, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      uploadArea.addEventListener(eventName, unhighlight, false);
+    });
+
+    function highlight() {
+      uploadArea.classList.add('dragover');
+    }
+
+    function unhighlight() {
+      uploadArea.classList.remove('dragover');
+    }
+
+    // Handle dropped files
+    uploadArea.addEventListener('drop', handleDrop, false);
+
+    function handleDrop(e) {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+
+      if (files.length > 0) {
+        const file = files[0];
+
+        // Check file type
+        if (!file.name.endsWith('.csv')) {
+          showError('Only CSV files are supported');
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // Use fetch API to upload
+        fetch('/upload', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'error') {
+            showError(data.message);
+          } else {
+            // Reload the page to show the new data
+            window.location.reload();
+          }
+        })
+        .catch(error => {
+          showError('Upload failed: ' + error.message);
+        });
+      }
+    }
+
+    function showError(message) {
+      if (errorDiv && errorMessage) {
+        errorMessage.textContent = message;
+        errorDiv.style.display = 'block';
+      } else {
+        alert(message);
+      }
+    }
+  });
+</script>
 </body>
 </html>
