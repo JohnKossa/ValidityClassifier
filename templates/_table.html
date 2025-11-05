@@ -51,23 +51,7 @@
         </tr>
         {% include '_filter_row.html' %}
       </thead>
-      <tbody id="table-body">
-        {% for _, row in df.iterrows() %}
-          {% include '_row.html' %}
-        {% endfor %}
-
-        {% if has_more %}
-        <tr id="load-more-trigger" 
-            hx-get="/load_more?page={{ current_page + 1 }}&page_size={{ page_size }}" 
-            hx-trigger="revealed"
-            hx-swap="outerHTML"
-            class="load-more-row">
-          <td colspan="{{ df.columns|length + 1 }}" class="load-more-cell">
-            <div class="loading-indicator">Loading more rows...</div>
-          </td>
-        </tr>
-        {% endif %}
-      </tbody>
+      {% include '_table_body.html' %}
     </table>
   </form>
 </div>

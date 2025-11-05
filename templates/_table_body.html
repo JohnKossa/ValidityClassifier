@@ -6,8 +6,9 @@
   {% if has_more %}
   <tr id="load-more-trigger" 
       hx-get="/load_more?page={{ current_page + 1 }}&page_size={{ page_size }}" 
+      hx-target="#table-body"
       hx-trigger="revealed"
-      hx-swap="outerHTML"
+      hx-swap="beforeEnd"
       class="load-more-row">
     <td colspan="{{ df.columns|length + 1 }}" class="load-more-cell">
       <div class="loading-indicator">Loading more rows...</div>
