@@ -244,6 +244,7 @@
     // Set up filter auto-submit functionality
     const filterForm = document.getElementById('filter-form');
     let filterDebounceTimeout;
+    let filtersChanged = false;
     if (filterForm) {
       // Debounce function to limit how often a function can be called
       function debounce(func, wait) {
@@ -259,6 +260,10 @@
 
       // Function to submit the filter form
       function submitFilterForm() {
+        if(!filtersChanged){
+            return
+        }
+        filtersChanged  = false;
         if(filterDebounceTimeout) {
           clearTimeout(filterDebounceTimeout)
         }
@@ -275,7 +280,10 @@
         input.addEventListener('blur', submitFilterForm);
 
         // Submit on keyup with debounce (after user stops typing for 5 seconds)
-        input.addEventListener('keyup', debouncedSubmit);
+        input.addEventListener('keyup', ()=>{
+            filtersChanged = true
+            debouncedSubmit()
+        });
       });
     }
 
