@@ -243,15 +243,15 @@
 
     // Set up filter auto-submit functionality
     const filterForm = document.getElementById('filter-form');
+    let filterDebounceTimeout;
     if (filterForm) {
       // Debounce function to limit how often a function can be called
       function debounce(func, wait) {
-        let timeout;
         return function() {
           const context = this;
           const args = arguments;
-          clearTimeout(timeout);
-          timeout = setTimeout(() => {
+          clearTimeout(filterDebounceTimeout);
+          filterDebounceTimeout = setTimeout(() => {
             func.apply(context, args);
           }, wait);
         };
@@ -259,6 +259,9 @@
 
       // Function to submit the filter form
       function submitFilterForm() {
+        if(filterDebounceTimeout) {
+          clearTimeout(filterDebounceTimeout)
+        }
         // Use HTMX to trigger the request
         htmx.trigger(filterForm, 'submit');
       }
